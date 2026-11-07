@@ -1,7 +1,9 @@
 {
-  "name": "Time Tracker & Tacho",
-  "short_name": "TimeTracker",
-  "start_url": "./index.html?v=nowa",
+  "id": "/Clock-IN-OUT/",
+  "name": "Clock In & Out Tacho",
+  "short_name": "ClockInOut",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#1b242a",
   "theme_color": "#1b242a",
