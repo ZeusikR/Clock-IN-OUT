@@ -6,6 +6,13 @@
   <title>Time Tracker & Tacho</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1b242a">
+  <!-- Tutaj wklejasz konfigurację PWA -->
+    <link rel="manifest" href="./manifest.json">
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js');
+      }
+    </script>
   <style>
     :root {
       --bg: #1b242a;
