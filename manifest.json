@@ -1,6 +1,6 @@
 {
   "id": "/Clock-IN-OUT/",
-  "name": "Clock In & Out Tacho v2",
+  "name": "Clock In & Out Tacho",
   "short_name": "ClockInOut",
   "start_url": "/Clock-IN-OUT/index.html",
   "scope": "/Clock-IN-OUT/",
