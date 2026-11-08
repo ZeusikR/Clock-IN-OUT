@@ -35,6 +35,7 @@
     .pages-container {
       flex: 1; min-height: 0; display: flex; width: 200%;
       transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+      touch-action: pan-y;
     }
     .page {
       width: 50%; height: 100%; overflow-y: auto; padding: 20px 16px;
@@ -231,7 +232,10 @@
     return mondayKey(new Date(ts + 'T12:00:00')) === mondayKey(new Date());
   }
 
+  let currentPage = 0;
+
   function switchPage(index) {
+    currentPage = index;
     document.getElementById('pagesContainer').style.transform = `translateX(-${index * 50}%)`;
     document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === index));
   }
@@ -430,6 +434,30 @@
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
+
+  // Swipe między stronami
+  (function () {
+    const el = document.getElementById('pagesContainer');
+    let startX = 0, startY = 0, tracking = false;
+
+    el.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+      tracking = true;
+    }, { passive: true });
+
+    el.addEventListener('touchend', (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (dx < 0 && currentPage === 0) switchPage(1);
+      else if (dx > 0 && currentPage === 1) switchPage(0);
+    }, { passive: true });
+  })();
 
   updateUI();
 </script>
