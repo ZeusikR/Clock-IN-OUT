@@ -1,4 +1,4 @@
-const CACHE = 'clock-in-out-v3';
+const CACHE = 'clock-in-out-v4';
 const ASSETS = [
   './',
   './index.html',
