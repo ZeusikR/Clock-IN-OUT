@@ -1,4 +1,4 @@
-const CACHE = 'clock-in-out-v4';
+const CACHE = 'clock-in-out-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,7 @@ self.addEventListener('activate', (e) => {
   );
 });
 
+// Najpierw sieć (żeby aktualizacje docierały), a gdy brak internetu – cache
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   const sameOrigin = new URL(e.request.url).origin === self.location.origin;
