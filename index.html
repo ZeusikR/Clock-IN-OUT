@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Tracker & Tacho</title>
+  <meta name="theme-color" content="#2b383c">
+  <link rel="manifest" href="./manifest.json">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js?v=2').catch(() => {});
+      });
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #2b383c; --card: #34444a; --text: #fff; --muted: #9fb0b8; --border: #455760;
+      --in: #b8ad6a; --out: #667a45; --tin: #d98a7c; --tout: #72c4a2;
+      --b1: #7f8fc4; --b2: #bcc2dd;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      height: 100vh; height: 100dvh; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .app { width: 100%; max-width: 420px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+    .pages { flex: 1; min-height: 0; display: flex; width: 200%; touch-action: pan-y;
+      transition: transform .3s cubic-bezier(.25,1,.5,1); }
+    .page { width: 50%; height: 100%; overflow-y: auto; padding: 22px 16px 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    .header { text-align: center; }
+    .time-title { font-size: 2rem; font-weight: 700; letter-spacing: 1px; }
+    .date-title { font-size: 1.15rem; color: var(--muted); margin-top: 2px; }
+    .circles-row, .cols { display: flex; width: 100%; justify-content: space-around; gap: 12px; }
+    .circle-btn {
+      width: 92px; height: 92px; border-radius: 50%; border: none; color: #1b242a;
+      font-size: 1.05rem; font-weight: 600; line-height: 1.2; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,.3); transition: transform .1s;
+    }
+    .circle-btn:active { transform: scale(.94); }
+    .b-in { background: var(--in); } .b-out { background: var(--out); }
+    .b-tin { background: var(--tin); } .b-tout { background: var(--tout); }
+    .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .grid { display: grid; grid-template-columns: 58px 58px; gap: 10px; }
+    .adj {
+      width: 58px; height: 58px; border-radius: 50%; border: none; cursor: pointer;
+      font-size: .95rem; font-weight: 600; color: #1b242a; transition: transform .1s;
+    }
+    .adj:active { transform: scale(.92); }
+    .a5 { background: var(--b1); } .a1 { background: var(--b2); }
+    .tv {
+      width: 100%; max-width: 140px; text-align: center; font-size: 1.5rem; font-weight: 700;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 4px; cursor: pointer;
+    }
+    .tv.empty { color: var(--muted); font-size: 1rem; font-weight: 400; padding: 14px 4px; }
+    .confirm-btn {
+      background: #d9d9d9; color: #111; border: none; border-radius: 6px;
+      padding: 10px 28px; font-size: .95rem; font-weight: 600; cursor: pointer;
+    }
+    .confirm-btn:active { transform: scale(.96); }
+    .hint { font-size: .75rem; color: var(--muted); text-align: center; margin-top: -8px; }
+    .card { width: 100%; text-align: center; padding: 4px 0 8px; }
+    .card h2 { font-size: 1.5rem; margin-bottom: 4px; }
+    .total { font-size: 1.5rem; font-weight: 700; color: var(--in); }
+    .logs { text-align: left; margin-top: 10px; font-size: .85rem; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .row small { color: var(--muted); }
+    .del { color: #ff6b6b; cursor: pointer; padding: 4px 8px; }
+    .csv { background: transparent; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 8px; padding: 8px 14px; margin-top: 12px; cursor: pointer; font-size: .8rem; }
+    .dots { height: 40px; flex: none; display: flex; justify-content: center; align-items: center; gap: 12px; }
+    .dot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid #fff; background: transparent; cursor: pointer; }
+    .dot.active { background: #fff; }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="pages" id="pages"></div>
+  <div class="dots">
+    <div class="dot active" onclick="switchPage(0)"></div>
+    <div class="dot" onclick="switchPage(1)"></div>
+  </div>
+</div>
+
+<script>
+  const KEY = 'punch_tacho_data_v10';
+  const CFG = {
+    work:  { i: 'inT',     o: 'outT',     d: 'shiftDate', h: 'history' },
+    tacho: { i: 'tachoIn', o: 'tachoOut', d: 'tachoDate', h: 'tachoHistory' }
+  };
+  const pad = n => String(n).padStart(2, '0');
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const nowHHMM = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const dateKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const mins = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const diffMin = (a, b) => { let d = mins(b) - mins(a); if (d < 0) d += 1440; return d; }; // zmiany nocne
+  const fmt = m => `${Math.floor(m / 60)}h ${m % 60}m`;
+
+  function mondayKey(d) {
+    const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+    return dateKey(x);
+  }
+  const inWeek = ts => ts && mondayKey(new Date(ts + 'T12:00:00')) === mondayKey(new Date());
+
+  function load() {
+    const base = { inT: null, outT: null, shiftDate: null, tachoIn: null, tachoOut: null, tachoDate: null, history: [], tachoHistory: [] };
+    try {
+      const raw = localStorage.getItem(KEY) || localStorage.getItem('punch_tacho_data_v9');
+      const s = raw ? JSON.parse(raw) : {};
+      Object.assign(base, s);
+      if (!base.inT && s.adjIn) base.inT = s.adjIn;    // migracja ze starej wersji
+      if (!base.outT && s.adjOut) base.outT = s.adjOut;
+    } catch (e) {}
+    return base;
+  }
+  let data = load();
+  let currentPage = 0;
+
+  // ---------- budowa stron ----------
+  function col(k, w) {
+    const b = (label, d, c) => `<button class="adj ${c}" onclick="adjust('${k}','${w}',${d})">${label}</button>`;
+    return `<div class="col">
+      <div class="grid">${b('+5m', 5, 'a5')}${b('-5m', -5, 'a5')}${b('+1m', 1, 'a1')}${b('-1m', -1, 'a1')}</div>
+      <div class="tv empty" id="${k}-${w}" onclick="edit('${k}','${w}')">--:--</div>
+    </div>`;
+  }
+  function page(k, li, lo, ci, co) {
+    return `<div class="page">
+      <div class="header"><div class="time-title live-clock">00:00:00</div><div class="date-title live-date">--</div></div>
+      <div class="circles-row">
+        <button class="circle-btn ${ci}" onclick="press('${k}','i')">${li}</button>
+        <button class="circle-btn ${co}" onclick="press('${k}','o')">${lo}</button>
+      </div>
+      <div class="cols">${col(k, 'i')}${col(k, 'o')}</div>
+      <button class="confirm-btn" id="${k}-ok" onclick="confirmShift('${k}')">Zatwierdź</button>
+      <div class="hint">Wpis trafi do tabeli dopiero po zatwierdzeniu</div>
+      <div class="card">
+        <h2>Cały tydzień</h2>
+        <div class="total" id="${k}-total">0h 0m</div>
+        <div class="logs" id="${k}-log"></div>
+        <button class="csv" onclick="exportCSV('${k}')">Pobierz raport (CSV)</button>
+      </div>
+    </div>`;
+  }
+  document.getElementById('pages').innerHTML =
+    page('work', 'IN', 'OUT', 'b-in', 'b-out') +
+    page('tacho', 'Tacho<br>IN', 'Tacho<br>OUT', 'b-tin', 'b-tout');
+
+  // ---------- nawigacja ----------
+  function switchPage(i) {
+    currentPage = i;
+    document.getElementById('pages').style.transform = `translateX(-${i * 50}%)`;
+    document.querySelectorAll('.dot').forEach((d, n) => d.classList.toggle('active', n === i));
+  }
+  (function () {
+    const el = document.getElementById('pages');
+    let sx = 0, sy = 0, on = false;
+    el.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; on = true; }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (!on) return; on = false;
+      const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (dx < 0 && currentPage === 0) switchPage(1);
+      else if (dx > 0 && currentPage === 1) switchPage(0);
+    }, { passive: true });
+  })();
+
+  function tick() {
+    const n = new Date();
+    const t = n.toLocaleTimeString('pl-PL', { hour12: false });
+    const d = n.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
+    document.querySelectorAll('.live-clock').forEach(e => e.innerText = t);
+    document.querySelectorAll('.live-date').forEach(e => e.innerText = d);
+  }
+  setInterval(tick, 1000); tick();
+
+  // ---------- akcje ----------
+  function press(k, w) {
+    const c = CFG[k];
+    data[c[w]] = nowHHMM();
+    if (w === 'i') { data[c.o] = null; data[c.d] = dateKey(new Date()); }
+    else if (!data[c.d]) data[c.d] = dateKey(new Date());
+    render();
+  }
+  function adjust(k, w, delta) {
+    const c = CFG[k];
+    if (!data[c[w]]) data[c[w]] = nowHHMM();
+    if (!data[c.d]) data[c.d] = dateKey(new Date());
+    const t = ((mins(data[c[w]]) + delta) % 1440 + 1440) % 1440;
+    data[c[w]] = `${pad(Math.floor(t / 60))}:${pad(t % 60)}`;
+    render();
+  }
+  function edit(k, w) {
+    const c = CFG[k];
+    const v = prompt('Wpisz nowy czas (format HH:MM):', data[c[w]] || '00:00');
+    if (v === null) return;
+    const m = v.trim().match(/^(\d{1,2})[:.](\d{2})$/);
+    if (m && +m[1] < 24 && +m[2] < 60) {
+      data[c[w]] = `${pad(+m[1])}:${pad(+m[2])}`;
+      if (!data[c.d]) data[c.d] = dateKey(new Date());
+      render();
+    } else alert('Niepoprawny format czasu! Użyj formatu HH:MM (np. 22:08).');
+  }
+  function confirmShift(k) {
+    const c = CFG[k];
+    if (!data[c.i] || !data[c.o]) { alert('Uzupełnij godzinę IN i OUT.'); return; }
+    const ts = data[c.d] || dateKey(new Date());
+    data[c.h] = data[c.h].filter(x => x.ts !== ts);
+    data[c.h].push({ ts, in: data[c.i], out: data[c.o] });
+    data[c.h].sort((a, b) => a.ts.localeCompare(b.ts));
+    data[c.i] = data[c.o] = data[c.d] = null;
+    render();
+    const btn = document.getElementById(k + '-ok');
+    btn.innerText = 'Zapisano ✓';
+    setTimeout(() => btn.innerText = 'Zatwierdź', 1200);
+  }
+  function del(k, ts) {
+    data[CFG[k].h] = data[CFG[k].h].filter(x => x.ts !== ts);
+    render();
+  }
+  const dayLabel = ts => {
+    const d = new Date(ts + 'T12:00:00');
+    return `${cap(d.toLocaleDateString('pl-PL', { weekday: 'long' }))}, ${d.toLocaleDateString('pl-PL')}`;
+  };
+
+  function render() {
+    for (const k in CFG) {
+      const c = CFG[k];
+      for (const w of ['i', 'o']) {
+        const el = document.getElementById(`${k}-${w}`);
+        el.innerText = data[c[w]] || '--:--';
+        el.classList.toggle('empty', !data[c[w]]);
+      }
+      const list = data[c.h].filter(x => inWeek(x.ts));
+      let total = 0;
+      document.getElementById(k + '-log').innerHTML = list.map(x => {
+        const m = diffMin(x.in, x.out); total += m;
+        return `<div class="row"><span><b>${dayLabel(x.ts)}</b><br><small>${x.in} - ${x.out}</small></span><b>${fmt(m)}</b><span class="del" onclick="del('${k}','${x.ts}')">✖</span></div>`;
+      }).join('');
+      document.getElementById(k + '-total').innerText = fmt(total);
+    }
+    try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {}
+  }
+
+  function exportCSV(k) {
+    const list = data[CFG[k].h].filter(x => x.ts);
+    if (!list.length) { alert('Brak danych do eksportu!'); return; }
+    let csv = '\uFEFFData;Start;Koniec;Czas\n';
+    list.forEach(x => csv += `${dayLabel(x.ts)};${x.in};${x.out};${fmt(diffMin(x.in, x.out))}\n`);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = k === 'work' ? 'raport_czasu_pracy.csv' : 'raport_tacho.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  render();
+</script>
+</body>
+</html>
